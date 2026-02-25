@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: revenue-forecast-sync
+  name: revenue-forecast-sync
+  namespace: revenue-forecast-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: revenue-forecast-sync
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: revenue-forecast-sync
+    spec:
+      containers:
+      - image: docker.io/strakertech/revenue-forecast-sync:prod-latest
+        name: revenue-forecast-sync
+        imagePullPolicy: Always
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: "1"
+          requests:
+            memory: 512Mi
+            cpu: "0.5"
+        startupProbe:
+          exec:
+            command: ["python", "-c", "import sys; sys.exit(0)"]
+          timeoutSeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command: ["python", "-c", "import sys; sys.exit(0)"]
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+          periodSeconds: 300
+          failureThreshold: 3
+        volumeMounts:
+          - name: application-env
+            mountPath: /app/.env
+            subPath: .env
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+      volumes:
+        - name: application-env
+          secret:
+            secretName: revenue-forecast-sync-env
+            items:
+            - key: revenue-forecast-sync-env.env
+              path: .env
+# kubectl create secret generic revenue-forecast-sync-env --from-file=revenue-forecast-sync-env.env --namespace=revenue-forecast-sync
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    svc-name: revenue-forecast-sync-svc
+  name: revenue-forecast-sync-svc
+  namespace: revenue-forecast-sync
+spec:
+  ports:
+  - name: "revenue-forecast-sync-port"
+    port: 80
+    targetPort: 8080
+  selector:
+    app: revenue-forecast-sync
+  type: ClusterIP
+---

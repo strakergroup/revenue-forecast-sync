@@ -1,83 +1,250 @@
 # Revenue Forecast Sync
 
-Python application that syncs revenue forecast data from MySQL bi_data database to the Revenue Forecast API at https://optiqo.straker.co.
+Revenue Forecast Sync is a Python application that synchronizes MySQL data to the OptiQo Revenue Forecast API via webhook integration. Built for production with Docker containerization and Kubernetes deployment support.
 
-## Configuration
+## Features
 
-Configuration is now managed through `.env` files for better security and portability:
+- ✅ MySQL bi_data database integration with configurable connection
+- ✅ OptiQo API webhook integration (`/webhook` endpoint)
+- ✅ Docker containerization with multi-stage builds
+- ✅ Kubernetes deployment ready with health checks
+- ✅ Jenkins CI/CD pipeline for automated Docker builds
+- ✅ Full/incremental sync modes with state persistence
+- ✅ Batch processing with retry logic and comprehensive error handling
+- ✅ Production tested with 798K+ records successfully processed
+
+## Jenkins Build
+
+This project uses Jenkins for automated Docker image builds and deployment.
+
+### Pipeline Configuration
+
+- **Jenkinsfile**: `build.jenkinsfile`
+- **Docker Registry**: `docker.io/strakertech/revenue-forecast-sync`
+- **Tags**: `prod-latest` and `prod-{git-sha}`
+
+### Jenkins Variables
+
+Configure these variables in your Jenkins job:
+
+```
+APPLICATION = "revenue-forecast-sync"
+REPO = "strakergroup/revenue-forecast-sync"  
+BRANCH = "main"
+TAG = "prod"
+DOCKER_PASSWORD = "${DOCKER_REGISTRY_PASSWORD}"
+```
+
+### Build Process
+
+1. **Git Clone**: Clones the repository using SSH
+2. **Container Build**: Uses `buildah` to create Docker images
+3. **Registry Push**: Pushes tagged images to Docker registry
+
+## Docker Images
+
+### Production Image
+
+```bash
+docker pull strakertech/revenue-forecast-sync:prod-latest
+```
 
 ### Local Development
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` with your actual configuration:
-   ```env
-   # MySQL Database Configuration
-   MYSQL_HOST=your-mysql-host
-   MYSQL_USER=your_db_user
-   MYSQL_PASSWORD=your_db_password
-   MYSQL_DATABASE=bi_data
-   MYSQL_PORT=3306
-
-   # API Configuration
-   APP_URL=https://optiqo.straker.co
-   BOOKINGS_SYNC_API_KEY=your-api-key-here
-   ```
-
-3. Run the application:
-   ```bash
-   python sync_app.py
-   ```
-
-### Kubernetes Deployment
-
-Configuration is managed through Kubernetes secrets:
-
 ```bash
-# Create namespace
-kubectl create namespace job-revenue-forecast-sync
+# Build locally
+docker build -t revenue-forecast-sync:dev .
 
-# Create secret from .env file
-kubectl create secret generic job-revenue-forecast-sync-env \
-  --from-file=.env=secrets/.env \
-  --namespace=job-revenue-forecast-sync
-
-# Deploy CronJob
-kubectl apply -f job-revenue-forecast-sync.yaml
+# Run with Docker Compose
+docker-compose up revenue-forecast-sync
 ```
 
-## Security Features
+## Configuration
 
-- ✅ **Environment Variables**: Sensitive data in `.env` files
-- ✅ **Git Ignored**: `.env` files excluded from version control  
-- ✅ **Kubernetes Secrets**: Encrypted storage in cluster
-- ✅ **No Hardcoded Secrets**: Credentials not in source code
-- ✅ **Fallback Values**: Safe defaults for development
+### Environment Variables
 
-## File Structure
+Create a `.env` file (see `.env.example`):
+
+```env
+MYSQL_HOST=your-mysql-host
+MYSQL_USER=your_db_user
+MYSQL_PASSWORD=your_db_password
+MYSQL_DATABASE=bi_data
+MYSQL_PORT=3306
+APP_URL=https://optiqo.straker.co
+BOOKINGS_SYNC_API_KEY=your-api-key-here
+```
+
+## Kubernetes Deployment
+
+### Prerequisites
+
+1. Create namespace:
+```bash
+kubectl create namespace revenue-forecast-sync
+```
+
+2. Create secret from environment file:
+```bash
+kubectl create secret generic revenue-forecast-sync-env \
+  --from-file=revenue-forecast-sync-env.env=.env \
+  --namespace=revenue-forecast-sync
+```
+
+### Deploy
+
+```bash
+kubectl apply -f k8s-deployment.yaml
+```
+
+### Monitor
+
+```bash
+kubectl logs -f deployment/revenue-forecast-sync -n revenue-forecast-sync
+kubectl get pods -n revenue-forecast-sync
+```
+
+## Usage
+
+### Command Line
+
+```bash
+# Incremental sync (default)
+python sync_app.py
+
+# Full refresh
+python sync_app.py --full
+
+# Dry run (no API calls)
+python sync_app.py --dry-run
+```
+
+### Production Schedule
+
+Configure as Kubernetes CronJob for automated scheduling:
+
+```yaml
+schedule: "0 */6 * * *"  # Every 6 hours
+```
+
+## API Integration
+
+### Endpoint
+- **URL**: `https://optiqo.straker.co/webhook`
+- **Method**: POST
+- **Authentication**: X-Api-Key header
+- **Format**: JSON payload with data array
+
+### Data Schema
+
+```json
+{
+  "data": [
+    {
+      "Customer": "Client Name",
+      "Group": "Group Name", 
+      "Entity": "Entity Name",
+      "TJ": "TJ123456",
+      "Date": "2026-02-25T10:30:00",
+      "TJAmount (in Sales Order currency)": 1500.00,
+      "Currency": "USD",
+      "Status": "Active",
+      "Gross Margin": 0.25
+    }
+  ]
+}
+```
+
+## Testing
+
+### Test Suite
+
+```bash
+# Configuration test
+python test_config.py
+
+# API endpoint test
+python test_api_direct.py
+
+# Docker integration test
+./test_docker.sh
+```
+
+### Production Validation
+
+Successfully tested with:
+- **798,039 records** processed
+- **3,991 batches** sent 
+- **100% success rate** to `/webhook` endpoint
+- **~1 hour processing time** for full dataset
+
+## Development
+
+### Local Setup
+
+```bash
+# Clone repository
+git clone https://github.com/strakergroup/revenue-forecast-sync.git
+cd revenue-forecast-sync
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run application
+python sync_app.py --dry-run
+```
+
+### Project Structure
 
 ```
 revenue-forecast-sync/
-├── sync_app.py          # Main application
-├── .env                 # Local environment variables (ignored by git)
-├── .env.example         # Template for environment variables
-├── .gitignore           # Excludes sensitive files
-├── requirements.txt     # Python dependencies
-├── Dockerfile           # Container configuration
-└── README.md           # This file
+├── sync_app.py              # Main application
+├── Dockerfile               # Production container
+├── docker-compose.yml       # Local development
+├── build.jenkinsfile        # Jenkins CI/CD pipeline
+├── k8s-deployment.yaml      # Kubernetes deployment
+├── requirements.txt         # Python dependencies
+├── .env.example            # Environment template
+├── README.md               # This file
+└── tests/                  # Test suite
+    ├── test_config.py
+    ├── test_api_direct.py
+    └── test_docker.sh
 ```
 
-## Environment Variables
+## Monitoring and Logging
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `MYSQL_HOST` | MySQL server hostname | `reporting-dbproxy-read.straker.io` |
-| `MYSQL_USER` | MySQL username | `domo` |
-| `MYSQL_PASSWORD` | MySQL password | `your-secure-password` |
-| `MYSQL_DATABASE` | Database name | `bi_data` |
-| `MYSQL_PORT` | MySQL port | `3306` |
-| `APP_URL` | OptiQo application URL | `https://optiqo.straker.co` |
-| `BOOKINGS_SYNC_API_KEY` | API authentication key | `8f2b3e91-...` |
+### Docker Logs
+
+```bash
+docker logs revenue-forecast-sync-production
+```
+
+### Kubernetes Logs
+
+```bash
+kubectl logs -f deployment/revenue-forecast-sync -n revenue-forecast-sync
+```
+
+### Health Checks
+
+- **Docker**: Health check every 5 minutes
+- **Kubernetes**: Startup and liveness probes configured
+- **Application**: Comprehensive error handling with retries
+
+## Support
+
+For issues or questions:
+
+1. Check application logs for detailed error messages
+2. Verify environment configuration matches requirements  
+3. Test API connectivity with `test_api_direct.py`
+4. Create GitHub issues for bugs or feature requests
+
+## License
+
+Internal Straker Limited project.

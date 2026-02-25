@@ -1,30 +1,32 @@
-version: '3.8'
-
 services:
   revenue-forecast-sync:
-    build: .
-    image: strakertech/revenue-forecast-sync:latest
-    volumes:
-      - ./config.ini:/app/config.ini:ro
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: strakertech/revenue-forecast-sync:prod-latest
+    container_name: revenue-forecast-sync-production
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      - PYTHONUNBUFFERED=1
-    restart: "no"
-    profiles:
-      - test
-    
-  mysql-test:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: testpass
-      MYSQL_DATABASE: bi_data
-      MYSQL_USER: testuser
-      MYSQL_PASSWORD: testpass
-    ports:
-      - "3306:3306"
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - APP_URL=${APP_URL}
+      - BOOKINGS_SYNC_API_KEY=${BOOKINGS_SYNC_API_KEY}
     volumes:
-      - mysql_data:/var/lib/mysql
-    profiles:
-      - test
-
-volumes:
-  mysql_data:
+      - ./last_sync.txt:/app/last_sync.txt
+    command: python sync_app.py
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 300s
+      timeout: 30s
+      retries: 2
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
