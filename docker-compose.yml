@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  revenue-forecast-sync:
+    build: .
+    image: strakertech/revenue-forecast-sync:latest
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: "no"
+    profiles:
+      - test
+    
+  mysql-test:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: testpass
+      MYSQL_DATABASE: bi_data
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    profiles:
+      - test
+
+volumes:
+  mysql_data:

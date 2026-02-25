@@ -1,0 +1,25 @@
+# Ignore environment files containing sensitive data
+.env
+.env.local
+.env.production
+.env.staging
+
+# Ignore sync state files
+last_sync.txt
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore logs
+*.log
