@@ -46,7 +46,9 @@ API_KEY = os.environ.get("BOOKINGS_SYNC_API_KEY", "8f2b3e91-7a4c-4d5e-bc81-2a9f3
 
 BATCH_SIZE = 200       # Rows per POST request
 RETRY_ATTEMPTS = 3     # Number of retries per batch
-LAST_SYNC_FILE = os.path.join(os.path.dirname(__file__), "last_sync.txt")
+
+# Use environment variable for last sync file path (supports Kubernetes persistent volumes)
+LAST_SYNC_FILE = os.environ.get("LAST_SYNC_FILE", os.path.join(os.path.dirname(__file__), "last_sync.txt"))
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -128,7 +130,10 @@ def serialize(obj):
 
 
 def read_last_sync():
+    """Read the last sync timestamp from persistent storage"""
     try:
+        # Ensure the directory exists (for Kubernetes persistent volume)
+        os.makedirs(os.path.dirname(LAST_SYNC_FILE), exist_ok=True)
         with open(LAST_SYNC_FILE) as f:
             ts = f.read().strip()
             return ts if ts else None
@@ -137,6 +142,9 @@ def read_last_sync():
 
 
 def write_last_sync(ts: str):
+    """Write the last sync timestamp to persistent storage"""
+    # Ensure the directory exists (for Kubernetes persistent volume)
+    os.makedirs(os.path.dirname(LAST_SYNC_FILE), exist_ok=True)
     with open(LAST_SYNC_FILE, "w") as f:
         f.write(ts)
 
