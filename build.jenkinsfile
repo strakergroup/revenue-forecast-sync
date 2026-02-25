@@ -37,7 +37,10 @@ GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
           sh(script: '''
 cd /root/container-build/${APPLICATION}/
 GITTAG=$(git rev-parse --short=7 HEAD)
+echo "Building with Git SHA: $GITTAG"
 buildah build --no-cache -t strakertech/${APPLICATION}:$TAG-latest -t strakertech/${APPLICATION}:$TAG-$GITTAG .
+# Store GITTAG for push stage
+echo $GITTAG > /tmp/gittag.txt
           ''')
         }
       }
@@ -46,7 +49,9 @@ buildah build --no-cache -t strakertech/${APPLICATION}:$TAG-latest -t strakertec
       steps {
         container('container-builder') {
           sh(script: '''
-GITTAG=$(git rev-parse --short=7 HEAD)
+# Read stored GITTAG from build stage
+GITTAG=$(cat /tmp/gittag.txt)
+echo "Pushing with Git SHA: $GITTAG"
 buildah push --format docker strakertech/${APPLICATION}:$TAG-latest
 buildah push --format docker strakertech/${APPLICATION}:$TAG-$GITTAG
 echo "Revenue Forecast Sync container built and pushed to DockerHub."
