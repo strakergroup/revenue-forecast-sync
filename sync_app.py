@@ -46,6 +46,7 @@ API_KEY = os.environ.get("BOOKINGS_SYNC_API_KEY", "8f2b3e91-7a4c-4d5e-bc81-2a9f3
 
 BATCH_SIZE = 200       # Rows per POST request
 RETRY_ATTEMPTS = 3     # Number of retries per batch
+FETCH_BATCH_SIZE = 1000  # MySQL fetch batch size (memory optimization)
 
 # Use environment variable for last sync file path (supports Kubernetes persistent volumes)
 LAST_SYNC_FILE = os.environ.get("LAST_SYNC_FILE", os.path.join(os.path.dirname(__file__), "last_sync.txt"))
@@ -232,24 +233,68 @@ def run(full_refresh: bool = False, dry_run: bool = False):
 
     try:
         conn = mysql.connector.connect(**MYSQL_CONFIG)
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=False)  # Use unbuffered cursor
         log.info("Connected to MySQL at %s/%s", MYSQL_CONFIG["host"], MYSQL_CONFIG["database"])
     except Exception as e:
         log.error("Failed to connect to MySQL: %s", e)
         sys.exit(1)
 
     try:
-        # Test with limited data first
+        # Use streaming query for memory efficiency
         sql = QUERY.format(where_clause=where_clause)
-        if dry_run:
-            # Full query for dry run
-            cursor.execute(sql)
-        else:
-            # Full production mode - fetch all records
-            cursor.execute(sql)
-            log.info("FULL SYNC MODE: Fetching all records from database")
-        rows = cursor.fetchall()
-        log.info("Fetched %d rows from MySQL", len(rows))
+        cursor.execute(sql)
+        
+        # Process data in streaming batches to avoid OOM
+        total_processed = 0
+        total_inserted = 0
+        total_updated = 0
+        batch_buffer = []
+        
+        log.info("STREAMING MODE: Processing data in batches of %d records", FETCH_BATCH_SIZE)
+        
+        while True:
+            # Fetch records in chunks
+            chunk = cursor.fetchmany(FETCH_BATCH_SIZE)
+            if not chunk:
+                break
+                
+            total_processed += len(chunk)
+            log.info("Processing chunk: %d-%d records (total: %d)", 
+                    total_processed - len(chunk) + 1, total_processed, total_processed)
+            
+            # Convert chunk to serializable format
+            serializable_chunk = json.loads(json.dumps(chunk, default=serialize))
+            
+            # Add to batch buffer
+            batch_buffer.extend(serializable_chunk)
+            
+            # Send batches when buffer reaches BATCH_SIZE
+            while len(batch_buffer) >= BATCH_SIZE:
+                batch = batch_buffer[:BATCH_SIZE]
+                batch_buffer = batch_buffer[BATCH_SIZE:]
+                
+                batch_num = (total_processed // BATCH_SIZE) + 1
+                log.info("Batch %d (%d rows)…", batch_num, len(batch))
+                
+                if not dry_run:
+                    result = send_batch(batch, dry_run)
+                    total_inserted += result.get("inserted", 0)
+                    total_updated += result.get("updated", 0)
+                    log.info("  → inserted: %d, updated: %d", result.get("inserted", 0), result.get("updated", 0))
+        
+        # Send remaining records in buffer
+        if batch_buffer:
+            batch_num = (total_processed // BATCH_SIZE) + 1
+            log.info("Final batch %d (%d rows)…", batch_num, len(batch_buffer))
+            
+            if not dry_run:
+                result = send_batch(batch_buffer, dry_run)
+                total_inserted += result.get("inserted", 0)
+                total_updated += result.get("updated", 0)
+                log.info("  → inserted: %d, updated: %d", result.get("inserted", 0), result.get("updated", 0))
+        
+        log.info("Processed %d total records from MySQL", total_processed)
+        
     except Exception as e:
         log.error("Query failed: %s", e)
         sys.exit(1)
@@ -257,27 +302,11 @@ def run(full_refresh: bool = False, dry_run: bool = False):
         cursor.close()
         conn.close()
 
-    if not rows:
+    if total_processed == 0:
         log.info("No rows to sync. Done.")
         if not full_refresh:
             write_last_sync(sync_start)
         return
-
-    # Serialise MySQL date objects
-    serialisable_rows = json.loads(json.dumps(rows, default=serialize))
-
-    # Send in batches
-    total_inserted = 0
-    total_updated = 0
-    batches = [serialisable_rows[i:i + BATCH_SIZE] for i in range(0, len(serialisable_rows), BATCH_SIZE)]
-    log.info("Sending %d batches of up to %d rows each", len(batches), BATCH_SIZE)
-
-    for i, batch in enumerate(batches, 1):
-        log.info("Batch %d/%d (%d rows)…", i, len(batches), len(batch))
-        result = send_batch(batch, dry_run)
-        total_inserted += result.get("inserted", 0)
-        total_updated += result.get("updated", 0)
-        log.info("  → inserted: %d, updated: %d", result.get("inserted", 0), result.get("updated", 0))
 
     log.info("Sync complete. Total: %d inserted, %d updated", total_inserted, total_updated)
 
