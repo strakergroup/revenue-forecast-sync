@@ -115,7 +115,7 @@ LEFT OUTER JOIN bi_data.clients c
 LEFT OUTER JOIN `groups` g
     ON g.group_uuid = j.group_uuid
 LEFT OUTER JOIN straker_groups sg
-    ON sg.straker_group_uuid = g.entity_uuid
+    ON sg.straker_group_uuid = j.entity_uuid
 {where_clause}
 ORDER BY j.job_created DESC
 """
