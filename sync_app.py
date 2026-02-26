@@ -95,27 +95,57 @@ log = logging.getLogger("revenue-forecast-sync")
 
 
 QUERY = """
+
+WITH po AS (
+SELECT
+p.job_uuid,
+SUM(p.amount*p.ex_rate_to_usd) AS `po_usd`
+FROM bi_data.purchaseorders p
+WHERE p.is_internal=0
+AND p.is_deleted=0
+AND p.is_declined=0
+GROUP BY p.job_uuid
+)
 SELECT
     c.client_name                                    AS `Customer`,
     g.group_name                                     AS `Group`,
+    sup.super_group_name                             AS `Super Group`,
     sg.straker_group_name                            AS `Entity`,
     CONCAT('TJ', j.job_id)                           AS `TJ`,
     j.job_created                                    AS `Date`,
+    j.job_type                                       AS `Job Type`,
+    j.job_value_usd                                  AS `Quote_USD`,
     j.quote                                          AS `TJAmount (in Sales Order currency)`,
     j.quote_nett                                     AS `TJAmount nett (in Sales Order currency)`,
-    j.quote_currency                                 AS `Currency`,
+    SUBSTRING_INDEX(j.quote_currency, '_', 1)        AS `Currency`,
     j.due_date                                       AS `Expected Due Date`,
     j.job_status                                     AS `Status`,
     j.completed_date                                 AS `Completed Date`,
     j.wip_completed_pct                              AS `WIP`,
-    j.gross_margin                                   AS `Gross Margin`
+    sua.straker_user_name				             AS `Account Manager`,
+    j.certtype                                       AS `Cert Type`,
+    po.po_usd                                        AS `PO_USD`,
+    j.gross_margin                                   AS `Gross Margin`,
+    1 - (j.job_value_usd/po.po_usd)                  AS `Margin`,
+    st.service_type_titile                           AS `Service Type`,
+    j.business_unit,
+    j.business_unit_new,
+    j.business_unit_incl_ibm
 FROM bi_data.jobs j
 LEFT OUTER JOIN bi_data.clients c
     ON c.client_uuid = j.client_uuid
 LEFT OUTER JOIN `groups` g
     ON g.group_uuid = j.group_uuid
+LEFT OUTER JOIN super_groups sup
+ON sup.super_group_uuid=g.super_group_uuid
 LEFT OUTER JOIN straker_groups sg
     ON sg.straker_group_uuid = j.entity_uuid
+LEFT OUTER JOIN straker_users sua
+    ON sua.straker_user_uuid = j.account_manager_uuid
+LEFT OUTER JOIN po
+    ON po.job_uuid = j.job_uuid
+LEFT OUTER JOIN bi_data.service_types st
+	ON st.service_type_id=j.service_type_id
 {where_clause}
 ORDER BY j.job_created DESC
 """
