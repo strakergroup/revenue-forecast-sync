@@ -219,11 +219,11 @@ def run(full_refresh: bool = False, dry_run: bool = False):
     sync_start = datetime.utcnow().isoformat()
 
     if last_sync:
-        where_clause = f"WHERE j.job_created >= '{last_sync}' OR j.completed_date >= '{last_sync}'"
-        log.info("Incremental sync: fetching records modified since %s", last_sync)
+        where_clause = f"WHERE j.job_created >= '2025-04-01' AND (j.job_created >= '{last_sync}' OR j.completed_date >= '{last_sync}')"
+        log.info("Incremental sync: fetching records from 2025-04-01 onwards, modified since %s", last_sync)
     else:
-        where_clause = ""
-        log.info("Full refresh: fetching all records")
+        where_clause = "WHERE j.job_created >= '2025-04-01'"
+        log.info("Full refresh: fetching all records from 2025-04-01 onwards")
 
     try:
         import mysql.connector
