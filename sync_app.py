@@ -160,8 +160,8 @@ def send_batch(rows: list, dry_run: bool) -> dict:
 
     # Use the correct API endpoint for OptiQo
     url = f"{APP_URL.rstrip('/')}/api/sync/bookings"
-    # Send rows directly as JSON array (API expects JSON, not wrapped in {"data": ...})
-    payload = rows
+    # API expects object with data array, not direct array
+    payload = {"data": rows}
 
     for attempt in range(1, RETRY_ATTEMPTS + 1):
         try:
