@@ -160,7 +160,8 @@ def send_batch(rows: list, dry_run: bool) -> dict:
 
     # Use the correct webhook endpoint
     url = f"{APP_URL.rstrip('/')}/webhook"
-    payload = {"data": rows}
+    # Send rows directly as JSON array (API expects JSON, not wrapped in {"data": ...})
+    payload = rows
 
     for attempt in range(1, RETRY_ATTEMPTS + 1):
         try:
@@ -185,13 +186,15 @@ def send_batch(rows: list, dry_run: bool) -> dict:
             log.info(f"API Response Headers: {dict(resp.headers)}")
             log.info(f"API Response (first 200 chars): {resp.text[:200]}")
             
-            # Check if response is JSON or HTML
+            # Check if response is JSON
             if resp.headers.get('content-type', '').startswith('application/json'):
                 return resp.json()
             else:
-                # HTML response indicates successful webhook reception
-                log.info("Received HTML response - webhook received successfully")
-                return {"status": "success", "message": "Data received by webhook", "response": resp.text[:100]}
+                # Non-JSON response - log warning but continue processing
+                log.warning("Expected JSON response but received: %s", resp.headers.get('content-type', 'unknown'))
+                log.warning("Response body (first 200 chars): %s", resp.text[:200])
+                # Return default response structure to continue processing
+                return {"inserted": 0, "updated": 0, "total": len(rows), "message": "Non-JSON response received"}
         except requests.exceptions.ConnectionError:
             log.warning("Attempt %d/%d: Connection error. Is the OptiQo server running?", attempt, RETRY_ATTEMPTS)
         except requests.exceptions.Timeout:
