@@ -158,8 +158,8 @@ def send_batch(rows: list, dry_run: bool) -> dict:
 
     import requests
 
-    # Use the correct webhook endpoint
-    url = f"{APP_URL.rstrip('/')}/webhook"
+    # Use the correct API endpoint for OptiQo
+    url = f"{APP_URL.rstrip('/')}/api/sync/bookings"
     # Send rows directly as JSON array (API expects JSON, not wrapped in {"data": ...})
     payload = rows
 
